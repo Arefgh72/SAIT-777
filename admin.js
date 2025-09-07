@@ -38,7 +38,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loadingMessage = document.getElementById('loading-message');
     const logoutButton = document.getElementById('logout-button');
     const institutionFilter = document.getElementById('institution-filter');
-    const dateFilter = document.getElementById('date-filter');
+    const startDateFilter = document.getElementById('start-date-filter');
+    const endDateFilter = document.getElementById('end-date-filter');
     const resetFiltersButton = document.getElementById('reset-filters');
     const exportExcelButton = document.getElementById('export-excel');
     const paginationContainer = document.getElementById('pagination-container');
@@ -59,7 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let allRecords = []; 
     let memberNames = {}; 
     let institutionNames = {};
-    let currentFilters = { institution: 'all', date: '', status: 'all', memberId: null };
+    let currentFilters = { institution: 'all', startDate: '', endDate: '', status: 'all', memberId: null };
     let currentPage = 1; 
     const ITEMS_PER_PAGE = 30;
 
@@ -100,9 +101,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     function applyAllFilters() {
         let filtered = [...allRecords];
         if (currentFilters.institution !== 'all') { filtered = filtered.filter(r => r.institutionId == currentFilters.institution); }
-        const filterDate = normalizeNumbers(dateFilter.value.trim());
-        if (filterDate) {
-            filtered = filtered.filter(record => normalizeNumbers(record.date).startsWith(filterDate));
+        const startDate = normalizeNumbers(startDateFilter.value.trim());
+        if (startDate) {
+            filtered = filtered.filter(record => normalizeNumbers(record.date.split(/,|،/)[0].trim()) >= startDate);
+        }
+        const endDate = normalizeNumbers(endDateFilter.value.trim());
+        if (endDate) {
+            filtered = filtered.filter(record => normalizeNumbers(record.date.split(/,|،/)[0].trim()) <= endDate);
         }
         if (currentFilters.status !== 'all') { filtered = filtered.filter(r => r.status === currentFilters.status); }
         if (currentFilters.memberId) { filtered = filtered.filter(r => r.memberId == currentFilters.memberId); }
@@ -112,9 +117,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Event Listeners ---
     function setupEventListeners() {
         institutionFilter.addEventListener('change', (e) => { currentFilters.institution = e.target.value; currentFilters.memberId = null; currentPage = 1; renderPage(); });
-        dateFilter.addEventListener('input', () => { formatDateInput(dateFilter); currentPage = 1; renderPage(); });
+        startDateFilter.addEventListener('input', () => { formatDateInput(startDateFilter); currentPage = 1; renderPage(); });
+        endDateFilter.addEventListener('input', () => { formatDateInput(endDateFilter); currentPage = 1; renderPage(); });
         statusFilterButtons.forEach(btn => { btn.addEventListener('click', () => { statusFilterButtons.forEach(b => b.classList.remove('active')); btn.classList.add('active'); currentFilters.status = btn.dataset.status; currentPage = 1; renderPage(); }); });
-        resetFiltersButton.addEventListener('click', () => { institutionFilter.value = 'all'; dateFilter.value = ''; statusFilterButtons.forEach(b => b.classList.remove('active')); document.querySelector('.filter-btn[data-status="all"]').classList.add('active'); currentFilters = { institution: 'all', date: '', status: 'all', memberId: null }; currentPage = 1; renderPage(); });
+        resetFiltersButton.addEventListener('click', () => { institutionFilter.value = 'all'; startDateFilter.value = ''; endDateFilter.value = ''; statusFilterButtons.forEach(b => b.classList.remove('active')); document.querySelector('.filter-btn[data-status="all"]').classList.add('active'); currentFilters = { institution: 'all', startDate: '', endDate: '', status: 'all', memberId: null }; currentPage = 1; renderPage(); });
         adminDataBody.addEventListener('click', async (e) => { if (e.target.classList.contains('clickable-member')) { e.preventDefault(); const memberId = e.target.dataset.memberId; currentFilters.memberId = memberId; memberProfileName.textContent = `پروفایل عضو: ${e.target.textContent}`; memberProfileCard.innerHTML = `<p>در حال دریافت آمار...</p>`; memberProfileView.style.display = 'block'; currentPage = 1; renderPage(); const result = await apiCall('getMemberProfile', { memberId }); if (result.status === 'success') { const profile = result.data; memberProfileCard.innerHTML = `<p>تاریخ ثبت نام: <span class="highlight">${profile.creationDate}</span></p><p>کد ملی: <span class="highlight">${profile.nationalId}</span></p><p>شماره موبایل: <span class="highlight">${profile.mobile}</span></p><hr><p>تعداد کل حضور: <span class="highlight present">${profile.totalPresents}</span></p><p>تعداد کل غیبت: <span class="highlight absent">${profile.totalAbsents}</span></p><p>آخرین حضور: <span class="highlight">${profile.lastPresent}</span></p><p>آخرین غیبت: <span class="highlight">${profile.lastAbsent}</span></p>`; } else { memberProfileCard.innerHTML = `<p class="error-message">${result.message}</p>`; } } });
         mainMenuButton.addEventListener('click', () => { mainMenuDropdown.style.display = mainMenuDropdown.style.display === 'block' ? 'none' : 'block'; });
         addInstitutionForm.addEventListener('submit', async (e) => { e.preventDefault(); const username = document.getElementById('new-inst-username').value.trim(); const password = document.getElementById('new-inst-password').value.trim(); if (!username || !password) return; const payload = { username, password }; addInstStatus.textContent = 'در حال ایجاد...'; const result = await apiCall('addInstitution', payload); if (result.status === 'success') { addInstStatus.style.color = 'green'; addInstStatus.textContent = result.data.message + ' صفحه در حال بارگذاری مجدد است...'; setTimeout(() => location.reload(), 2500); } else { addInstStatus.style.color = 'red'; addInstStatus.textContent = result.message; } });
@@ -126,7 +132,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // --- بارگذاری اولیه و رفرش خودکار ---
     async function refreshData() { try { const [dashboardResult, adminDataResult] = await Promise.all([ apiCall('getDashboardStats', {}), apiCall('getAdminData', {}) ]); if (dashboardResult.status === 'success') { renderDashboard(dashboardResult.data); } if (adminDataResult.status === 'success') { allRecords = adminDataResult.data.reverse(); renderPage(); } } catch (error) { console.error("خطا در رفرش خودکار:", error); } }
-    
     async function initializeAdminPanel() {
         loadingMessage.textContent = 'در حال بارگذاری...';
         try {
