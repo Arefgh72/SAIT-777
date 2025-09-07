@@ -10,6 +10,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    // --- شناسایی عناصر ---
+    const logTableBody = document.getElementById('log-table-body');
+    const loadingMessage = document.getElementById('loading-log');
+    const userFilter = document.getElementById('user-filter');
+    const actionTypeFilter = document.getElementById('action-type-filter');
+    const startDateFilter = document.getElementById('start-date-filter');
+    const endDateFilter = document.getElementById('end-date-filter');
+    const resetFiltersButton = document.getElementById('reset-filters-log');
+    const exportExcelButton = document.getElementById('export-excel');
+    const paginationContainer = document.getElementById('pagination-container');
+
+    // --- متغیرهای وضعیت ---
+    let allLogs = [];
+    let currentFilters = { user: '', actionType: 'all', startDate: '', endDate: '' };
+    let currentPage = 1;
+    const ITEMS_PER_PAGE = 30;
+    
     // --- توابع کمکی ---
     const persianNumbers = [/۰/g, /۱/g, /۲/g, /۳/g, /۴/g, /۵/g, /۶/g, /۷/g, /۸/g, /۹/g];
     const arabicNumbers  = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
@@ -32,23 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = value;
     }
 
-    // --- شناسایی عناصر ---
-    const logTableBody = document.getElementById('log-table-body');
-    const loadingMessage = document.getElementById('loading-log');
-    const userFilter = document.getElementById('user-filter');
-    const actionTypeFilter = document.getElementById('action-type-filter');
-    const startDateFilter = document.getElementById('start-date-filter');
-    const endDateFilter = document.getElementById('end-date-filter');
-    const resetFiltersButton = document.getElementById('reset-filters-log');
-    const exportExcelButton = document.getElementById('export-excel');
-    const paginationContainer = document.getElementById('pagination-container');
-
-    // --- متغیرهای وضعیت ---
-    let allLogs = [];
-    let currentFilters = { user: '', actionType: 'all', startDate: '', endDate: '' };
-    let currentPage = 1;
-    const ITEMS_PER_PAGE = 30;
-    
     // --- تابع کمکی برای تماس با API ---
     async function apiCall(action, payload) {
         try {
@@ -72,7 +72,55 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- توابع نمایش ---
     function renderPage() { const filteredLogs = applyFilters(); const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE); currentPage = Math.min(currentPage, totalPages || 1); const startIndex = (currentPage - 1) * ITEMS_PER_PAGE; const pageRecords = filteredLogs.slice(startIndex, startIndex + ITEMS_PER_PAGE); renderTable(pageRecords); renderPagination(totalPages); }
     function renderTable(logs) { logTableBody.innerHTML = ''; if (logs.length === 0) { logTableBody.innerHTML = '<tr><td colspan="5">رکوردی یافت نشد.</td></tr>'; return; } logs.forEach(log => { const row = document.createElement('tr'); row.innerHTML = `<td>${log.timestamp}</td><td>${log.actor}</td><td>${log.role === 'admin' ? 'مدیر' : 'موسسه'}</td><td>${log.type}</td><td>${log.desc}</td>`; logTableBody.appendChild(row); }); }
-    function renderPagination(totalPages) { paginationContainer.innerHTML = ''; if (totalPages <= 1) return; for (let i = 1; i <= totalPages; i++) { const pageButton = document.createElement('button'); pageButton.textContent = i; if (i === currentPage) pageButton.classList.add('active'); pageButton.addEventListener('click', () => { currentPage = i; renderPage(); }); paginationContainer.appendChild(pageButton); } }
+    
+    function renderPagination(totalPages) {
+        paginationContainer.innerHTML = '';
+        if (totalPages <= 1) return;
+
+        const createButton = (text, page) => {
+            const button = document.createElement('button');
+            button.textContent = text;
+            if (page) {
+                if (page === currentPage) button.classList.add('active');
+                button.addEventListener('click', () => {
+                    currentPage = page;
+                    renderPage();
+                });
+            } else {
+                button.disabled = true;
+            }
+            return button;
+        };
+
+        const prevButton = createButton('قبلی', currentPage - 1);
+        if (currentPage === 1) prevButton.disabled = true;
+        paginationContainer.appendChild(prevButton);
+
+        const pages = new Set();
+        pages.add(1);
+        pages.add(totalPages);
+        pages.add(currentPage);
+        if (currentPage > 1) pages.add(currentPage - 1);
+        if (currentPage < totalPages) pages.add(currentPage + 1);
+
+        const sortedPages = Array.from(pages).sort((a, b) => a - b);
+        
+        let lastPage = 0;
+        sortedPages.forEach(page => {
+            if (page > lastPage + 1) {
+                paginationContainer.appendChild(createButton('...'));
+            }
+            if (page > 0 && page <= totalPages) {
+                paginationContainer.appendChild(createButton(page, page));
+            }
+            lastPage = page;
+        });
+
+        const nextButton = createButton('بعدی', currentPage + 1);
+        if (currentPage === totalPages) nextButton.disabled = true;
+        paginationContainer.appendChild(nextButton);
+    }
+    
     function populateActionFilter(logs) { const actionTypes = [...new Set(logs.map(log => log.type))]; actionTypes.forEach(type => { const option = document.createElement('option'); option.value = type; option.textContent = type; actionTypeFilter.appendChild(option); }); }
 
     // --- منطق فیلترها ---
