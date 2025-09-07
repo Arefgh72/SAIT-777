@@ -96,7 +96,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     function populateFilters() { const currentSelection = institutionFilter.value; institutionFilter.innerHTML = '<option value="all">همه موسسات</option>'; Object.keys(institutionNames).forEach(id => { const option = document.createElement('option'); option.value = id; option.textContent = institutionNames[id]; institutionFilter.appendChild(option); }); institutionFilter.value = currentSelection; }
     function renderPage() { memberProfileView.style.display = currentFilters.memberId ? 'block' : 'none'; const filteredRecords = applyAllFilters(); const totalPages = Math.ceil(filteredRecords.length / ITEMS_PER_PAGE); currentPage = Math.min(currentPage, totalPages || 1); const startIndex = (currentPage - 1) * ITEMS_PER_PAGE; const pageRecords = filteredRecords.slice(startIndex, startIndex + ITEMS_PER_PAGE); renderTable(pageRecords); renderPagination(totalPages); }
     function renderTable(records) { adminDataBody.innerHTML = ''; let lastDate = null; if (records.length === 0) { adminDataBody.innerHTML = '<tr><td colspan="4">رکوردی یافت نشد.</td></tr>'; return; } records.forEach(record => { const recordDate = record.date.split(/,|،/)[0].trim(); if (recordDate !== lastDate && !currentFilters.memberId) { const dateRow = document.createElement('tr'); dateRow.innerHTML = `<td colspan="4" class="date-group-header">تاریخ: ${recordDate}</td>`; adminDataBody.appendChild(dateRow); lastDate = recordDate; } const row = document.createElement('tr'); const memberName = memberNames[record.memberId] || `(شناسه: ${record.memberId})`; const instName = institutionNames[record.institutionId] || `(شناسه: ${record.institutionId})`; row.innerHTML = `<td>${instName}</td><td><a href="#" class="clickable-member" data-member-id="${record.memberId}">${memberName}</a></td><td>${record.date}</td><td>${record.status}</td>`; adminDataBody.appendChild(row); }); }
-    function renderPagination(totalPages) { paginationContainer.innerHTML = ''; if (totalPages <= 1) return; const createButton = (text, page, isDisabled = false, isActive = false) => { const button = document.createElement('button'); button.textContent = text; button.disabled = isDisabled; if (isActive) button.classList.add('active'); button.addEventListener('click', () => { currentPage = page; renderPage(); }); return button; }; paginationContainer.appendChild(createButton('قبلی', currentPage - 1, currentPage === 1)); for (let i = 1; i <= totalPages; i++) { paginationContainer.appendChild(createButton(i, i, false, i === currentPage)); } paginationContainer.appendChild(createButton('بعدی', currentPage + 1, currentPage === totalPages)); }
+    
+    function renderPagination(totalPages) {
+        paginationContainer.innerHTML = '';
+        if (totalPages <= 1) return;
+
+        const createButton = (text, page) => {
+            const button = document.createElement('button');
+            button.textContent = text;
+            if (page) {
+                if (page === currentPage) button.classList.add('active');
+                button.addEventListener('click', () => {
+                    currentPage = page;
+                    renderPage();
+                });
+            } else {
+                button.disabled = true;
+            }
+            return button;
+        };
+
+        const prevButton = createButton('قبلی', currentPage - 1);
+        if (currentPage === 1) prevButton.disabled = true;
+        paginationContainer.appendChild(prevButton);
+
+        const pages = new Set();
+        pages.add(1);
+        pages.add(totalPages);
+        pages.add(currentPage);
+        if (currentPage > 1) pages.add(currentPage - 1);
+        if (currentPage < totalPages) pages.add(currentPage + 1);
+
+        const sortedPages = Array.from(pages).sort((a, b) => a - b);
+        
+        let lastPage = 0;
+        sortedPages.forEach(page => {
+            if (page > lastPage + 1) {
+                paginationContainer.appendChild(createButton('...'));
+            }
+            if (page > 0 && page <= totalPages) {
+                paginationContainer.appendChild(createButton(page, page));
+            }
+            lastPage = page;
+        });
+
+        const nextButton = createButton('بعدی', currentPage + 1);
+        if (currentPage === totalPages) nextButton.disabled = true;
+        paginationContainer.appendChild(nextButton);
+    }
     
     function applyAllFilters() {
         let filtered = [...allRecords];
