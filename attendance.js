@@ -2,6 +2,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // ❗ مهم: لینک API خود را اینجا قرار دهید
     const API_URL = "https://script.google.com/macros/s/AKfycbyFhhTg_2xf6TqTBdybO883H4f6562sTDUSY8dbQJyN2K-nmFVD7ViTgWllEPwOaf7V/exec";
 
+    // --- ۱. کد نگهبان و بررسی هویت ---
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    if (!userData || !userData.token || userData.role !== 'institute') {
+        localStorage.removeItem('userData');
+        window.location.href = 'index.html';
+        return;
+    }
+
     // --- شناسایی عناصر عمومی ---
     const instituteNameEl = document.getElementById('institute-name');
     const logoutButton = document.getElementById('logout-button');
@@ -10,25 +18,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const instMenuDropdown = document.getElementById('inst-menu-dropdown');
 
     // --- متغیرهای عمومی ---
-    const userData = JSON.parse(localStorage.getItem('userData'));
     let membersMap = {}; 
     let historyInitialized = false;
-
-    // --- بررسی اولیه ورود کاربر ---
-    if (!userData || userData.role !== 'institute') {
-        window.location.href = 'index.html';
-        return;
-    }
 
     // --- تابع کمکی برای تماس با API ---
     async function apiCall(action, payload) {
         try {
             const token = JSON.parse(localStorage.getItem('userData')).token;
+            if (!token) {
+                localStorage.removeItem('userData');
+                window.location.href = 'index.html';
+                return;
+            }
+            
             const response = await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ action, payload, token })
             });
             const result = await response.json();
+            
             if (result.status === 'error' && (result.message.includes('منقضی') || result.message.includes('نامعتبر'))) {
                 alert(result.message);
                 localStorage.removeItem('userData');
@@ -105,7 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const changeCredentialsModal = document.getElementById('change-credentials-modal');
         const changeCredentialsForm = document.getElementById('change-credentials-form');
         const changeCredentialsBtn = document.getElementById('change-credentials-btn');
-
         changeCredentialsBtn.addEventListener('click', () => {
             instMenuDropdown.style.display = 'none';
             changeCredentialsModal.style.display = 'flex';
@@ -146,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
     // =================================================================
     // بخش ۳: منطق تب ثبت حضور و غیاب
     // =================================================================
@@ -177,11 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isPresentChecked = previousStatus === 'حاضر' ? 'checked' : ''; 
             const isAbsentChecked = previousStatus === 'غایب' ? 'checked' : ''; 
             const row = document.createElement('tr'); 
-            row.innerHTML = `
-                <td>${member.fullName}</td>
-                <td>${member.nationalId}</td>
-                <td><input type="radio" id="present-${member.memberId}" name="status-${member.memberId}" value="حاضر" ${isPresentChecked} required><label for="present-${member.memberId}">حاضر</label><input type="radio" id="absent-${member.memberId}" name="status-${member.memberId}" value="غایب" ${isAbsentChecked}><label for="absent-${member.memberId}">غایب</label></td>
-            `; 
+            row.innerHTML = `<td>${member.fullName}</td><td>${member.nationalId}</td><td><input type="radio" id="present-${member.memberId}" name="status-${member.memberId}" value="حاضر" ${isPresentChecked} required><label for="present-${member.memberId}">حاضر</label><input type="radio" id="absent-${member.memberId}" name="status-${member.memberId}" value="غایب" ${isAbsentChecked}><label for="absent-${member.memberId}">غایب</label></td>`; 
             row.dataset.memberId = member.memberId; 
             memberListBody.appendChild(row); 
         }); 
@@ -246,23 +248,57 @@ document.addEventListener('DOMContentLoaded', () => {
                 const recordDate = record.date.split(/,|،/)[0].trim();
                 if (recordDate !== lastDate) { const dateRow = document.createElement('tr'); dateRow.innerHTML = `<td colspan="4" class="date-group-header">تاریخ: ${recordDate}</td>`; historyTableBody.appendChild(dateRow); lastDate = recordDate; }
                 const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${record.date}</td>
-                    <td>${record.fullName}</td>
-                    <td>${record.nationalId}</td>
-                    <td>${record.status}</td>`;
+                row.innerHTML = `<td>${record.date}</td><td>${record.fullName}</td><td>${record.nationalId}</td><td>${record.status}</td>`;
                 historyTableBody.appendChild(row);
             });
         }
 
         function renderHistoryPagination(totalPages) {
-            historyPaginationContainer.innerHTML = ''; if (totalPages <= 1) return;
-            for (let i = 1; i <= totalPages; i++) {
-                const pageButton = document.createElement('button'); pageButton.textContent = i;
-                if (i === currentHistoryPage) pageButton.classList.add('active');
-                pageButton.addEventListener('click', () => { currentHistoryPage = i; renderHistoryPage(); });
-                historyPaginationContainer.appendChild(pageButton);
-            }
+            historyPaginationContainer.innerHTML = '';
+            if (totalPages <= 1) return;
+
+            const createButton = (text, page) => {
+                const button = document.createElement('button');
+                button.textContent = text;
+                if (page) {
+                    if (page === currentHistoryPage) button.classList.add('active');
+                    button.addEventListener('click', () => {
+                        currentHistoryPage = page;
+                        renderHistoryPage();
+                    });
+                } else {
+                    button.disabled = true;
+                }
+                return button;
+            };
+
+            const prevButton = createButton('قبلی', currentHistoryPage - 1);
+            if (currentHistoryPage === 1) prevButton.disabled = true;
+            historyPaginationContainer.appendChild(prevButton);
+
+            const pages = new Set();
+            pages.add(1);
+            pages.add(totalPages);
+            pages.add(currentHistoryPage);
+            if (currentHistoryPage > 1) pages.add(currentHistoryPage - 1);
+            if (currentHistoryPage < totalPages) pages.add(currentHistoryPage + 1);
+
+            const sortedPages = Array.from(pages).sort((a, b) => a - b);
+            
+            let lastPage = 0;
+            sortedPages.forEach(page => {
+                if (page > lastPage + 1) {
+                    historyPaginationContainer.appendChild(createButton('...'));
+                }
+                if (page > 0 && page <= totalPages) {
+                    historyPaginationContainer.appendChild(createButton(page, page));
+                }
+                lastPage = page;
+            });
+
+            const nextButton = createButton('بعدی', currentHistoryPage + 1);
+            if (currentHistoryPage === totalPages) nextButton.disabled = true;
+            historyPaginationContainer.appendChild(nextButton);
         }
 
         async function fetchHistory() {
